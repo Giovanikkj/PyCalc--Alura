@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Volume2, VolumeX, Code, History, RotateCcw, Copy, Check } from 'lucide-react';
+import { Volume2, VolumeX, Code, History, RotateCcw, Copy, Check, Percent } from 'lucide-react';
 import { evaluateExpression, playKeySound } from './calculatorEngine.ts';
 import { PythonCodeModal } from './PythonCodeModal.tsx';
 
@@ -27,13 +27,20 @@ export default function App() {
 
     setVisorValue((prevVisor) => {
       // Se estava mostrando erro ou zero inicial
-      if (prevVisor === '0' || prevVisor === 'Erro' || prevVisor.includes('Divisão por zero')) {
+      if (prevVisor === '0' || prevVisor === 'Erro' || prevVisor.includes('Divisão')) {
         if (digit === '.') {
           setExpression('0.');
           return '0.';
         }
         setExpression(digit);
         return digit;
+      }
+
+      // Se o último caractere era %, adicionar número deve começar uma nova operação ou adicionar
+      if (prevVisor.endsWith('%')) {
+        const nextVal = prevVisor + '×' + digit;
+        setExpression(nextVal);
+        return nextVal;
       }
 
       // Evita múltiplos pontos no mesmo número
@@ -61,7 +68,7 @@ export default function App() {
     if (soundEnabled) playKeySound('op');
 
     setVisorValue((prevVisor) => {
-      if (prevVisor === 'Erro' || prevVisor.includes('Divisão por zero')) {
+      if (prevVisor === 'Erro' || prevVisor.includes('Divisão')) {
         return '0';
       }
 
@@ -79,12 +86,33 @@ export default function App() {
     });
   }, [soundEnabled]);
 
+  // Manipulação de Porcentagem (%)
+  const handlePercentage = useCallback(() => {
+    if (soundEnabled) playKeySound('percent');
+
+    setVisorValue((prevVisor) => {
+      if (!prevVisor || prevVisor === '0' || prevVisor === 'Erro' || prevVisor.includes('Divisão')) {
+        return '0';
+      }
+
+      const lastChar = prevVisor.slice(-1);
+      // Evita dois %% seguidos ou % logo após operadores
+      if (lastChar === '%' || ['+', '-', '×', '÷'].includes(lastChar)) {
+        return prevVisor;
+      }
+
+      const updated = prevVisor + '%';
+      setExpression(updated);
+      return updated;
+    });
+  }, [soundEnabled]);
+
   // Execução do cálculo (=)
   const handleCalculate = useCallback(() => {
     if (soundEnabled) playKeySound('equal');
 
     setVisorValue((prevVisor) => {
-      if (!prevVisor || prevVisor === '0' || prevVisor === 'Erro' || prevVisor.includes('Divisão por zero')) {
+      if (!prevVisor || prevVisor === '0' || prevVisor === 'Erro' || prevVisor.includes('Divisão')) {
         return prevVisor;
       }
 
@@ -123,7 +151,7 @@ export default function App() {
   const handleBackspace = useCallback(() => {
     if (soundEnabled) playKeySound('num');
     setVisorValue((prev) => {
-      if (prev === '0' || prev === 'Erro' || prev.includes('Divisão por zero') || prev.length <= 1) {
+      if (prev === '0' || prev === 'Erro' || prev.includes('Divisão') || prev.length <= 1) {
         setExpression('');
         return '0';
       }
@@ -144,10 +172,10 @@ export default function App() {
     }
   }, [visorValue]);
 
-  // Suporte a teclado físico (números, operadores, enter, esc, backspace)
+  // Suporte a teclado físico (números, operadores, porcentagem, enter, esc, backspace)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Não intercepta se o modal estiver aberto ou foco em input
+      // Não intercepta se o modal estiver aberto
       if (isModalOpen) {
         if (e.key === 'Escape') setIsModalOpen(false);
         return;
@@ -161,6 +189,10 @@ export default function App() {
         e.preventDefault();
         setActiveKey('.');
         handleDigit('.');
+      } else if (e.key === '%') {
+        e.preventDefault();
+        setActiveKey('%');
+        handlePercentage();
       } else if (e.key === '+') {
         e.preventDefault();
         setActiveKey('+');
@@ -195,7 +227,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDigit, handleOperator, handleCalculate, handleClear, handleBackspace, isModalOpen]);
+  }, [handleDigit, handleOperator, handlePercentage, handleCalculate, handleClear, handleBackspace, isModalOpen]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-sky-500/30">
@@ -207,7 +239,7 @@ export default function App() {
           </div>
           <span className="text-xl font-bold tracking-tight text-white">PyCalc</span>
           <span className="hidden sm:inline-block text-xs text-slate-400 ml-2">
-            4 Operações Básicas
+            4 Operações Básicas & Porcentagem
           </span>
         </div>
 
@@ -303,6 +335,7 @@ export default function App() {
                 <span>−</span>
                 <span>×</span>
                 <span>÷</span>
+                <span>%</span>
               </div>
             </div>
 
@@ -346,20 +379,32 @@ export default function App() {
               </div>
             </div>
 
-            {/* Teclado da Calculadora: Números, 4 Operações e Botão Limpar */}
+            {/* Teclado da Calculadora: Números, 4 Operações, Porcentagem e Botão Limpar */}
             <div className="grid grid-cols-4 gap-2.5">
               
-              {/* Linha 1: Botão Limpar Visor (C) ocupando 3 colunas, e Divisão (÷) */}
+              {/* Linha 1: Limpar Visor (C), Porcentagem (%) e Divisão (÷) */}
               <button
                 onClick={handleClear}
-                className={`col-span-3 py-3.5 px-4 rounded-xl font-semibold text-sm transition-all duration-100 flex items-center justify-center gap-2 select-none shadow-sm active:scale-[0.98] ${
+                className={`col-span-2 py-3.5 px-3 rounded-xl font-semibold text-sm transition-all duration-100 flex items-center justify-center gap-1.5 select-none shadow-sm active:scale-[0.98] ${
                   activeKey === 'C'
                     ? 'bg-rose-500 text-white'
                     : 'bg-rose-600/90 hover:bg-rose-600 text-white'
                 }`}
               >
-                <RotateCcw className="w-4 h-4" />
-                <span>Limpar Visor (C)</span>
+                <RotateCcw className="w-4 h-4 shrink-0" />
+                <span>Limpar (C)</span>
+              </button>
+
+              <button
+                onClick={handlePercentage}
+                className={`py-3.5 rounded-xl font-bold text-xl transition-all duration-100 select-none shadow-sm active:scale-[0.98] ${
+                  activeKey === '%'
+                    ? 'bg-slate-600 text-sky-300'
+                    : 'bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700/60'
+                }`}
+                title="Porcentagem"
+              >
+                %
               </button>
 
               <button
@@ -379,7 +424,7 @@ export default function App() {
                 className={`py-3.5 rounded-xl font-semibold text-lg transition-all duration-100 select-none active:scale-[0.98] ${
                   activeKey === '7'
                     ? 'bg-slate-600 text-white'
-                    : 'bg-slate-800 hover:bg-slate-750 hover:bg-slate-700/80 text-slate-100 border border-slate-700/50'
+                    : 'bg-slate-800 hover:bg-slate-700/80 text-slate-100 border border-slate-700/50'
                 }`}
               >
                 7
@@ -538,6 +583,8 @@ export default function App() {
               <div className="flex items-center gap-1.5 font-mono">
                 <kbd className="px-1 py-0.5 bg-slate-800 rounded text-slate-300">Enter</kbd>
                 <span>=</span>
+                <kbd className="px-1 py-0.5 bg-slate-800 rounded text-slate-300">%</kbd>
+                <span>%</span>
                 <kbd className="px-1 py-0.5 bg-slate-800 rounded text-slate-300">Esc</kbd>
                 <span>Limpar</span>
               </div>
@@ -561,8 +608,8 @@ export default function App() {
 
       {/* Rodapé Simples e Discreto */}
       <footer className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80">
-        <span>PyCalc · 4 Operações Básicas</span>
-        <span>Soma · Subtração · Multiplicação · Divisão</span>
+        <span>PyCalc · Operações Básicas & Porcentagem</span>
+        <span>Soma · Subtração · Multiplicação · Divisão · %</span>
       </footer>
 
       {/* Modal do Código Python */}

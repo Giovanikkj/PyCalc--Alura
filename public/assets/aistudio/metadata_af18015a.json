@@ -1,0 +1,6 @@
+{
+  "name": "PyCalc",
+  "description": "Calculadora simples com as 4 operações matemáticas básicas (soma, subtração, multiplicação e divisão) e porcentagem, com interface limpa e código Python integrado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

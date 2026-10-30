@@ -1,10 +1,10 @@
 /**
  * Motor de Cálculo para PyCalc
- * Implementa estritamente as 4 operações básicas (+, -, *, /)
+ * Implementa as 4 operações básicas (+, -, *, /) e cálculo de porcentagem (%)
  * com tratamento de precisão decimal e divisão por zero padrão Python.
  */
 
-export type OperationType = '+' | '-' | '*' | '/';
+export type OperationType = '+' | '-' | '*' | '/' | '%';
 
 export interface CalculationHistoryItem {
   id: string;
@@ -30,7 +30,27 @@ export function formatResult(value: number): string {
 }
 
 /**
- * Avalia com segurança uma expressão simples contendo apenas números e os 4 operadores.
+ * Converte expressões com porcentagem (%) para aritmética padrão de calculadora:
+ * 1. Base + Porcentagem: 100 + 20% -> 100 + ((100)*(20)/100) = 120
+ * 2. Base - Porcentagem: 200 - 15% -> 200 - ((200)*(15)/100) = 170
+ * 3. Multiplicação / Divisão ou número isolado: 200 * 15% -> 200 * ((15)/100) = 30; 50% -> 0.5
+ */
+export function preprocessPercentage(expr: string): string {
+  let clean = expr.replace(/\s+/g, '');
+  
+  // Trata Base + Taxa% e Base - Taxa%
+  clean = clean.replace(/(\d+(?:\.\d+)?)\s*([+-])\s*(\d+(?:\.\d+)?)%/g, (_match, base, op, rate) => {
+    return `${base}${op}((${base})*(${rate})/100)`;
+  });
+
+  // Trata porcentagens restantes (ex: 50%, 200 * 15%, 50 / 10%)
+  clean = clean.replace(/(\d+(?:\.\d+)?)%/g, '(($1)/100)');
+
+  return clean;
+}
+
+/**
+ * Avalia com segurança uma expressão contendo números, as 4 operações básicas e porcentagem.
  */
 export function evaluateExpression(expr: string): { success: boolean; result?: string; error?: string } {
   // Limpa espaços
@@ -39,7 +59,7 @@ export function evaluateExpression(expr: string): { success: boolean; result?: s
     return { success: true, result: '0' };
   }
 
-  // Verifica se termina em operador
+  // Remove operadores pendentes no final (exceto %)
   let cleanExpr = sanitized;
   while (cleanExpr.length > 0 && ['+', '-', '*', '/'].includes(cleanExpr.slice(-1))) {
     cleanExpr = cleanExpr.slice(0, -1);
@@ -49,21 +69,21 @@ export function evaluateExpression(expr: string): { success: boolean; result?: s
     return { success: true, result: '0' };
   }
 
-  // Validação estrita: apenas dígitos, ponto e os 4 operadores básicos
-  if (!/^[-+]?(\d+(\.\d+)?)([-+*/](\d+(\.\d+)?))*$/.test(cleanExpr)) {
+  // Pré-processa porcentagem
+  const expandedExpr = preprocessPercentage(cleanExpr);
+
+  // Validação estrita: apenas dígitos, ponto, parênteses e operadores básicos
+  if (!/^[-+*/.()0-9]+$/.test(expandedExpr)) {
     return { success: false, error: 'Expressão inválida' };
   }
 
-  // Divisão por zero detectada por regex antes da execução
-  if (/\/0(?!\.)|\/0\.0+(?![\d])/.test(cleanExpr) || /\/0$/.test(cleanExpr)) {
+  // Divisão por zero detectada antes da execução
+  if (/\/0(?!\.)|\/0\.0+(?![\d])/.test(expandedExpr) || /\/0$/.test(expandedExpr)) {
     return { success: false, error: 'Divisão por zero' };
   }
 
   try {
-    // Avaliação usando Function com escopo fechado sem acesso a globais
-    // Como a expressão já passou por regex estrito ^[-+]?(\d+(\.\d+)?)([-+*/](\d+(\.\d+)?))*$
-    // é 100% segura contra injeção
-    const evalFn = new Function(`return (${cleanExpr})`);
+    const evalFn = new Function(`return (${expandedExpr})`);
     const val = evalFn();
 
     if (!Number.isFinite(val)) {
@@ -84,7 +104,7 @@ export function evaluateExpression(expr: string): { success: boolean; result?: s
  */
 let audioCtx: AudioContext | null = null;
 
-export function playKeySound(type: 'num' | 'op' | 'clear' | 'equal' = 'num'): void {
+export function playKeySound(type: 'num' | 'op' | 'clear' | 'equal' | 'percent' = 'num'): void {
   try {
     if (!audioCtx) {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -113,7 +133,7 @@ export function playKeySound(type: 'num' | 'op' | 'clear' | 'equal' = 'num'): vo
       gain.connect(audioCtx.destination);
       osc.start(now);
       osc.stop(now + 0.04);
-    } else if (type === 'op') {
+    } else if (type === 'op' || type === 'percent') {
       osc.frequency.setValueAtTime(620, now);
       osc.frequency.exponentialRampToValueAtTime(420, now + 0.05);
       gain.gain.setValueAtTime(0.05, now);

@@ -7,8 +7,9 @@ interface PythonCodeModalProps {
 }
 
 export const PYTHON_SCRIPT_CONTENT = `"""
-PyCalc - Calculadora em Python (Operações Básicas)
-Executa apenas as 4 operações básicas: Soma (+), Subtração (-), Multiplicação (*), Divisão (/)
+PyCalc - Calculadora em Python (Operações Básicas & Porcentagem)
+Executa as 4 operações básicas: Soma (+), Subtração (-), Multiplicação (*), Divisão (/)
+além de cálculo de Porcentagem (%).
 Interface simples e intuitiva feita com Tkinter (biblioteca nativa do Python).
 
 Para executar localmente no seu computador:
@@ -17,6 +18,37 @@ Para executar localmente no seu computador:
 
 import sys
 import os
+import re
+
+def eval_pycalc_expression(expr: str):
+    clean = expr.replace(" ", "")
+    if not clean:
+        return "0"
+
+    allowed = set("0123456789+-*/.% ")
+    if not all(c in allowed for c in clean):
+        raise ValueError("Caractere inválido")
+
+    # Remove operadores pendentes no final (exceto %)
+    while clean and clean[-1] in "+-*/":
+        clean = clean[:-1]
+
+    # Trata Base + Taxa% e Base - Taxa% (ex: 100 + 20% -> 120, 200 - 15% -> 170)
+    def replace_add_sub(m):
+        base = m.group(1)
+        op = m.group(2)
+        rate = m.group(3)
+        return f"{base}{op}(({base})*({rate})/100)"
+
+    clean = re.sub(r'(\\d+(?:\\.\\d+)?)\\s*([+-])\\s*(\\d+(?:\\.\\d+)?)%', replace_add_sub, clean)
+    # Trata porcentagem restante (ex: 50% -> 0.5, 200 * 15% -> 30)
+    clean = re.sub(r'(\\d+(?:\\.\\d+)?)%', r'((\\1)/100)', clean)
+
+    result = eval(clean, {"__builtins__": None}, {})
+    if isinstance(result, float) and result.is_integer():
+        result = int(result)
+    return str(result)
+
 
 def run_gui():
     import tkinter as tk
@@ -36,8 +68,6 @@ def run_gui():
             self._bind_keys()
 
         def _create_widgets(self):
-            import tkinter as tk
-
             # Header PyCalc
             header_frame = tk.Frame(self.root, bg="#0F172A")
             header_frame.pack(fill="x", pady=(16, 8), padx=20)
@@ -53,7 +83,7 @@ def run_gui():
 
             subtitle = tk.Label(
                 header_frame,
-                text="4 Operações Básicas",
+                text="4 Operações Básicas & %",
                 font=("Segoe UI", 9),
                 bg="#0F172A",
                 fg="#94A3B8"
@@ -99,13 +129,15 @@ def run_gui():
             c_clear_hover = "#B91C1C"
             c_equal = "#10B981"
             c_equal_hover = "#059669"
+            c_special = "#475569"
+            c_special_hover = "#64748B"
             font_main = ("Segoe UI", 15, "bold")
 
-            # Linha 0: Limpar Visor (C) e Divisão (÷)
+            # Linha 0: Limpar Visor (C), Porcentagem (%) e Divisão (÷)
             btn_c = tk.Button(
                 btn_frame,
-                text="C  (Limpar Visor)",
-                font=("Segoe UI", 12, "bold"),
+                text="C  (Limpar)",
+                font=("Segoe UI", 11, "bold"),
                 bg=c_clear,
                 fg="#FFFFFF",
                 activebackground=c_clear_hover,
@@ -115,8 +147,9 @@ def run_gui():
                 cursor="hand2",
                 command=self.clear_visor
             )
-            btn_c.grid(row=0, column=0, columnspan=3, sticky="nsew", padx=3, pady=3)
+            btn_c.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=3, pady=3)
 
+            self._create_btn(btn_frame, "%", 0, 2, c_special, c_special_hover, "#FFFFFF", font_main, self.add_percent)
             self._create_btn(btn_frame, "÷", 0, 3, c_op, c_op_hover, "#FFFFFF", font_main, lambda: self.set_operator("/"))
 
             # Linha 1: 7, 8, 9, ×
@@ -157,7 +190,6 @@ def run_gui():
             self._create_btn(btn_frame, "=", 4, 3, c_equal, c_equal_hover, "#FFFFFF", font_main, self.calculate)
 
         def _create_btn(self, parent, text, row, col, bg, active_bg, fg, font_style, cmd):
-            import tkinter as tk
             btn = tk.Button(
                 parent,
                 text=text,
@@ -181,6 +213,7 @@ def run_gui():
             self.root.bind("-", lambda e: self.set_operator("-"))
             self.root.bind("*", lambda e: self.set_operator("*"))
             self.root.bind("/", lambda e: self.set_operator("/"))
+            self.root.bind("%", lambda e: self.add_percent())
             self.root.bind(".", lambda e: self.add_digit("."))
             self.root.bind(",", lambda e: self.add_digit("."))
             self.root.bind("<Return>", lambda e: self.calculate())
@@ -207,6 +240,20 @@ def run_gui():
 
             self.visor_text.set(self.expression)
 
+        def add_percent(self):
+            if not self.expression:
+                curr = self.visor_text.get()
+                if curr not in ("0", "Erro", "Divisão por zero"):
+                    self.expression = curr + "%"
+                else:
+                    return
+            else:
+                if self.expression[-1] in "+-*/%":
+                    return
+                self.expression += "%"
+
+            self.visor_text.set(self.expression)
+
         def set_operator(self, op: str):
             if not self.expression:
                 curr = self.visor_text.get()
@@ -226,16 +273,9 @@ def run_gui():
             if not self.expression:
                 return
             try:
-                allowed = set("0123456789+-*/. ")
-                if not all(c in allowed for c in self.expression):
-                    raise ValueError("Caractere inválido")
-
-                result = eval(self.expression, {"__builtins__": None}, {})
-                if isinstance(result, float) and result.is_integer():
-                    result = int(result)
-
-                self.visor_text.set(str(result))
-                self.expression = str(result)
+                result_str = eval_pycalc_expression(self.expression)
+                self.visor_text.set(result_str)
+                self.expression = result_str
             except ZeroDivisionError:
                 self.visor_text.set("Divisão por zero")
                 self.expression = ""
@@ -258,11 +298,11 @@ def run_gui():
 
 
 def run_cli():
-    print("=" * 36)
-    print("           PyCalc (Python)          ")
-    print("  Operações: Soma, Subtração,       ")
-    print("  Multiplicação e Divisão           ")
-    print("=" * 36)
+    print("=" * 38)
+    print("           PyCalc (Python)            ")
+    print(" Operações: Soma, Subtração,          ")
+    print(" Multiplicação, Divisão e Porcentagem ")
+    print("=" * 38)
     print("Comandos: 'c' para limpar, 'sair' para encerrar.\\n")
 
     visor = "0"
@@ -279,15 +319,7 @@ def run_cli():
                 print("Visor limpo.")
                 continue
 
-            allowed = set("0123456789+-*/. ")
-            if not all(c in allowed for c in entrada):
-                print("Erro: Apenas números e as 4 operações (+, -, *, /) são permitidos.")
-                continue
-
-            result = eval(entrada, {"__builtins__": None}, {})
-            if isinstance(result, float) and result.is_integer():
-                result = int(result)
-            visor = str(result)
+            visor = eval_pycalc_expression(entrada)
             print(f"Resultado: {visor}")
         except ZeroDivisionError:
             print("Erro: Divisão por zero!")
@@ -361,7 +393,7 @@ export const PythonCodeModal: React.FC<PythonCodeModalProps> = ({ isOpen, onClos
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-100">Código Python (pycalc.py)</h3>
-              <p className="text-xs text-slate-400">Calculadora em Python nativo com Tkinter (GUI) e modo Terminal (CLI)</p>
+              <p className="text-xs text-slate-400">Calculadora em Python nativo com 4 Operações Básicas & Porcentagem (%)</p>
             </div>
           </div>
 
