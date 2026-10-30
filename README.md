@@ -5,7 +5,7 @@ Um projeto simples, leve e educativo de uma Calculadora Básica desenvolvida em 
 Este repositório faz parte da minha jornada inicial na imersão Alura, servindo para praticar lógica de programação, manipulação de dados de entrada e criação de funções em Python.
 
 🚀 Funcionalidades
-A calculadora executa as 4 operações matemáticas fundamentais via terminal:
+A calculadora executa as 4 operações matemáticas fundamentais, além do cálculo de porcentagem, via terminal:
 
 ➕ Soma
 
@@ -14,6 +14,8 @@ A calculadora executa as 4 operações matemáticas fundamentais via terminal:
 ✖️ Multiplicação
 
 ➗ Divisão (com tratamento de erro para divisão por zero)
+
+% Porcentagem
 
 🛠️ Tecnologias Utilizadas
 Python 3 (Linguagem de programação principal)
